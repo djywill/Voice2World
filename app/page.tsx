@@ -38,19 +38,6 @@ const FUN_MESSAGES = [
   "🔮 Casting the final spell…",
 ];
 
-function generateStars(count: number) {
-  return Array.from({ length: count }, (_, i) => ({
-    id: i,
-    left: `${Math.random() * 100}%`,
-    top: `${Math.random() * 100}%`,
-    size: Math.random() * 3 + 1,
-    dur: `${Math.random() * 3 + 2}s`,
-    delay: `${Math.random() * 4}s`,
-  }));
-}
-
-const STARS = generateStars(80);
-
 export default function Home() {
   const [appState, setAppState] = useState<AppState>("idle");
   const [transcript, setTranscript] = useState("");
@@ -375,23 +362,7 @@ export default function Home() {
   /* ═══════════════════════════════════════════════════ */
   return (
     <>
-      {/* ── Background ────────────────────────────── */}
-      <div className="starfield" aria-hidden="true">
-        {STARS.map((s) => (
-          <span
-            key={s.id}
-            className="star"
-            style={{
-              left: s.left,
-              top: s.top,
-              width: s.size,
-              height: s.size,
-              "--dur": s.dur,
-              animationDelay: s.delay,
-            } as React.CSSProperties}
-          />
-        ))}
-      </div>
+      {/* ── Background blobs ─────────────────────── */}
       <div className="orb orb-1" aria-hidden="true" />
       <div className="orb orb-2" aria-hidden="true" />
       <div className="orb orb-3" aria-hidden="true" />
@@ -413,14 +384,28 @@ export default function Home() {
       {appState !== "viewing" && (
         <main className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 py-12">
           <div className="glass-card fade-in flex w-full max-w-lg flex-col items-center gap-6 text-center">
+            {/* Logos */}
+            <div className="logo-bar">
+              <img
+                src="/eduhk-logo.png"
+                alt="The Education University of Hong Kong"
+                style={{ height: 56 }}
+              />
+              <img
+                src="/lttc-logo.png"
+                alt="Centre for Learning, Teaching and Technology"
+                style={{ height: 36 }}
+              />
+            </div>
+
             {/* Title */}
             <div>
               <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
-                <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-amber-300 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-400 bg-clip-text text-transparent">
                   Voice2World
                 </span>
               </h1>
-              <p className="mt-2 text-base font-semibold text-slate-400 sm:text-lg">
+              <p className="mt-2 text-base font-semibold sm:text-lg" style={{ color: "var(--text-secondary)" }}>
                 Speak your imagination into a 3D world!
               </p>
             </div>
@@ -461,7 +446,7 @@ export default function Home() {
                       </div>
                     )}
 
-                    <p className="text-sm font-semibold text-slate-400">
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>
                       {appState === "listening"
                         ? "Listening… tap ⏹️ when done"
                         : "Tap the mic and describe your world"}
@@ -503,11 +488,11 @@ export default function Home() {
                 {/* Divider */}
                 {appState === "idle" && (
                   <div className="flex w-full items-center gap-3">
-                    <div className="h-px flex-1 bg-white/10" />
-                    <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                    <div className="h-px flex-1 bg-black/8" />
+                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
                       or try an idea
                     </span>
-                    <div className="h-px flex-1 bg-white/10" />
+                    <div className="h-px flex-1 bg-black/8" />
                   </div>
                 )}
 
@@ -533,10 +518,10 @@ export default function Home() {
               <div className="fade-in flex flex-col items-center gap-5">
                 <div className="globe-spinner" />
                 <p className="progress-msg text-center">{progressMsg}</p>
-                <p className="max-w-xs text-center text-sm text-slate-400">
+                <p className="max-w-xs text-center text-sm" style={{ color: "var(--text-secondary)" }}>
                   &ldquo;{transcript}&rdquo;
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                   This usually takes about 30 seconds…
                 </p>
               </div>
@@ -546,7 +531,7 @@ export default function Home() {
             {appState === "error" && (
               <div className="fade-in flex flex-col items-center gap-4">
                 <div className="text-5xl">😕</div>
-                <p className="text-center font-bold text-red-300">
+                <p className="text-center font-bold text-red-500">
                   {errorMsg}
                 </p>
                 <button className="action-btn primary" onClick={reset}>
@@ -557,8 +542,8 @@ export default function Home() {
           </div>
 
           {/* Footer */}
-          <p className="mt-8 text-xs text-slate-600">
-            Powered by Blockade Labs &middot; Built with Next.js
+          <p className="mt-8 text-xs" style={{ color: "var(--text-muted)" }}>
+            Powered by LTTC &middot; Built with Next.js
           </p>
         </main>
       )}

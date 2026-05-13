@@ -1,20 +1,23 @@
 @import "tailwindcss";
 
-/* ── Theme tokens ─────────────────────────────────────── */
+/* ── Theme tokens (LIGHT) ────────────────────────────── */
 :root {
-  --bg-deep: #070b1a;
-  --bg-mid: #0f1535;
-  --accent-purple: #8b5cf6;
-  --accent-indigo: #6366f1;
-  --accent-pink: #ec4899;
-  --accent-green: #34d399;
-  --accent-amber: #fbbf24;
-  --glow-purple: rgba(139, 92, 246, 0.35);
-  --glow-pink: rgba(236, 72, 153, 0.25);
-  --text-primary: #f1f5f9;
-  --text-muted: #94a3b8;
-  --card-bg: rgba(255, 255, 255, 0.04);
-  --card-border: rgba(255, 255, 255, 0.08);
+  --bg-page: #f5f0eb;
+  --bg-card: #ffffff;
+  --accent-purple: #7c5cbf;
+  --accent-indigo: #5b63d3;
+  --accent-pink: #d94f8e;
+  --accent-green: #2dab7f;
+  --accent-amber: #e09f30;
+  --accent-teal: #3aafa9;
+  --glow-purple: rgba(124, 92, 191, 0.18);
+  --glow-pink: rgba(217, 79, 142, 0.12);
+  --glow-teal: rgba(58, 175, 169, 0.12);
+  --text-primary: #2d2d3a;
+  --text-secondary: #5a5a72;
+  --text-muted: #8e8ea0;
+  --card-border: rgba(0, 0, 0, 0.07);
+  --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 /* ── Base ─────────────────────────────────────────────── */
@@ -28,44 +31,17 @@ html,
 body {
   height: 100%;
   font-family: "Nunito", system-ui, sans-serif;
-  background: var(--bg-deep);
+  background: var(--bg-page);
   color: var(--text-primary);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Starfield background ─────────────────────────────── */
-.starfield {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.star {
-  position: absolute;
-  border-radius: 50%;
-  background: white;
-  animation: twinkle var(--dur) ease-in-out infinite alternate;
-}
-
-@keyframes twinkle {
-  0% {
-    opacity: 0.15;
-    transform: scale(0.8);
-  }
-  100% {
-    opacity: 0.9;
-    transform: scale(1.2);
-  }
-}
-
-/* ── Gradient orbs (ambient light) ────────────────────── */
+/* ── Soft background blobs ────────────────────────────── */
 .orb {
   position: fixed;
   border-radius: 50%;
-  filter: blur(100px);
+  filter: blur(120px);
   pointer-events: none;
   z-index: 0;
 }
@@ -74,26 +50,26 @@ body {
   width: 500px;
   height: 500px;
   background: var(--glow-purple);
-  top: -10%;
-  left: -10%;
+  top: -12%;
+  left: -8%;
   animation: drift-1 18s ease-in-out infinite alternate;
 }
 
 .orb-2 {
-  width: 400px;
-  height: 400px;
+  width: 420px;
+  height: 420px;
   background: var(--glow-pink);
   bottom: -10%;
-  right: -10%;
+  right: -8%;
   animation: drift-2 22s ease-in-out infinite alternate;
 }
 
 .orb-3 {
-  width: 300px;
-  height: 300px;
-  background: rgba(52, 211, 153, 0.15);
-  top: 50%;
-  left: 60%;
+  width: 350px;
+  height: 350px;
+  background: var(--glow-teal);
+  top: 55%;
+  left: 55%;
   animation: drift-3 15s ease-in-out infinite alternate;
 }
 
@@ -125,7 +101,7 @@ body {
   justify-content: center;
   font-size: 3.5rem;
   background: linear-gradient(135deg, var(--accent-indigo), var(--accent-purple));
-  box-shadow: 0 0 0 0 var(--glow-purple), 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 0 var(--glow-purple), 0 8px 32px rgba(91, 99, 211, 0.25);
   transition: transform 0.2s, box-shadow 0.3s;
   position: relative;
   z-index: 1;
@@ -133,7 +109,7 @@ body {
 
 .mic-btn:hover {
   transform: scale(1.08);
-  box-shadow: 0 0 40px 8px var(--glow-purple), 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 40px 8px var(--glow-purple), 0 8px 32px rgba(91, 99, 211, 0.3);
 }
 
 .mic-btn:active {
@@ -147,13 +123,13 @@ body {
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5), 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45), 0 8px 32px rgba(0, 0, 0, 0.15);
   }
   70% {
-    box-shadow: 0 0 0 30px rgba(239, 68, 68, 0), 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 30px rgba(239, 68, 68, 0), 0 8px 32px rgba(0, 0, 0, 0.15);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 8px 32px rgba(0, 0, 0, 0.15);
   }
 }
 
@@ -183,7 +159,7 @@ body {
   }
 }
 
-/* ── Generate / action button ─────────────────────────── */
+/* ── Action buttons ───────────────────────────────────── */
 .action-btn {
   display: inline-flex;
   align-items: center;
@@ -207,20 +183,20 @@ body {
 }
 
 .action-btn.primary {
-  background: linear-gradient(135deg, var(--accent-green), #10b981);
-  color: #021a0d;
-  box-shadow: 0 0 30px rgba(52, 211, 153, 0.3), 0 4px 20px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, var(--accent-green), #1a9e6e);
+  color: white;
+  box-shadow: 0 4px 20px rgba(45, 171, 127, 0.3);
 }
 
 .action-btn.secondary {
-  background: var(--card-bg);
+  background: white;
   color: var(--text-primary);
   border: 1px solid var(--card-border);
-  backdrop-filter: blur(12px);
+  box-shadow: var(--card-shadow);
 }
 
 .action-btn.secondary:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #f8f5f2;
 }
 
 /* ── Example prompt chips ─────────────────────────────── */
@@ -229,8 +205,7 @@ body {
   padding: 0.6rem 1.2rem;
   border-radius: 999px;
   border: 1px solid var(--card-border);
-  background: var(--card-bg);
-  backdrop-filter: blur(12px);
+  background: white;
   color: var(--text-primary);
   font-family: "Nunito", sans-serif;
   font-size: 0.95rem;
@@ -238,12 +213,14 @@ body {
   cursor: pointer;
   transition: all 0.25s;
   white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .chip:hover {
-  background: rgba(139, 92, 246, 0.2);
+  background: rgba(124, 92, 191, 0.08);
   border-color: var(--accent-purple);
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.12);
 }
 
 /* ── Textarea ─────────────────────────────────────────── */
@@ -254,15 +231,14 @@ body {
   padding: 1rem 1.25rem;
   border-radius: 1rem;
   border: 2px solid var(--card-border);
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
+  background: white;
   color: var(--text-primary);
   font-family: "Nunito", sans-serif;
   font-size: 1.1rem;
   font-weight: 600;
   line-height: 1.6;
   resize: vertical;
-  transition: border-color 0.3s;
+  transition: border-color 0.3s, box-shadow 0.3s;
 }
 
 .prompt-area:focus {
@@ -299,7 +275,7 @@ body {
   position: absolute;
   inset: 6px;
   border-radius: 50%;
-  background: var(--bg-deep);
+  background: var(--bg-page);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -317,6 +293,7 @@ body {
   animation: msg-fade 3s ease-in-out infinite;
   font-size: 1.15rem;
   font-weight: 700;
+  color: var(--text-primary);
 }
 
 @keyframes msg-fade {
@@ -399,14 +376,14 @@ body {
 
 /* ── Card surface ─────────────────────────────────────── */
 .glass-card {
-  background: var(--card-bg);
+  background: var(--bg-card);
   border: 1px solid var(--card-border);
-  backdrop-filter: blur(20px);
   border-radius: 1.5rem;
   padding: 2.5rem 2rem;
+  box-shadow: var(--card-shadow);
 }
 
-/* ── Text input toggle ────────────────────────────────── */
+/* ── Mode toggle ──────────────────────────────────────── */
 .mode-toggle {
   display: inline-flex;
   align-items: center;
@@ -424,6 +401,21 @@ body {
 
 .mode-toggle:hover {
   color: var(--accent-purple);
+}
+
+/* ── Logo bar ─────────────────────────────────────────── */
+.logo-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.logo-bar img {
+  display: block;
+  height: auto;
+  object-fit: contain;
 }
 
 /* ── Responsive ───────────────────────────────────────── */
