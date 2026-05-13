@@ -1,6 +1,6 @@
 # Voice2World
 
-**From Imagination to Realistic** — Speak your imagination into an immersive 3D world.
+**From Imagination to Reality** — Speak your imagination into an immersive 3D world.
 
 A project by the [Centre for Learning, Teaching and Technology (LTTC)](https://lttc.eduhk.hk), The Education University of Hong Kong (EdUHK).
 
