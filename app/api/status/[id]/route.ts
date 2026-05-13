@@ -24,7 +24,7 @@ export async function GET(
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json(data.request ?? data);
   } catch (err) {
     console.error("Status route error:", err);
     return NextResponse.json(
