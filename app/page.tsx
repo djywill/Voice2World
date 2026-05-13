@@ -46,6 +46,7 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState("");
   const [useTextMode, setUseTextMode] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   const viewerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,6 +57,12 @@ export default function Home() {
   const animFrameRef = useRef<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const msgRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transcriptRef = useRef("");
+
+  /* keep ref in sync so onend can read latest transcript */
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
 
   /* ── Browser support check ────────────────────────── */
   useEffect(() => {
@@ -90,6 +97,7 @@ export default function Home() {
     recognition.interimResults = true;
     recognition.lang = navigator.language || "en-US";
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
       let text = "";
       for (let i = 0; i < event.results.length; i++) {
@@ -98,38 +106,59 @@ export default function Home() {
       setTranscript(text);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
-      if (event.error === "not-allowed") {
+      recognitionRef.current = null;
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         setErrorMsg(
-          "🎤 Microphone access denied! Please allow microphone access and try again."
+          "🎤 Microphone access denied! Please allow microphone access in your browser settings and try again."
         );
-      } else {
-        setErrorMsg("🎤 Couldn't hear you — check your microphone!");
+        setAppState("error");
+      } else if (event.error === "no-speech") {
+        setErrorMsg("🎤 No speech detected — try speaking louder!");
+        setAppState("error");
+      } else if (event.error !== "aborted") {
+        setErrorMsg("🎤 Couldn't hear you — please check your microphone!");
+        setAppState("error");
       }
-      setAppState("error");
     };
 
     recognition.onend = () => {
-      if (recognitionRef.current) {
-        setAppState("ready");
+      const wasActive = recognitionRef.current !== null;
+      recognitionRef.current = null;
+      if (wasActive) {
+        if (transcriptRef.current.trim()) {
+          setAppState("ready");
+        } else {
+          setAppState("idle");
+        }
       }
     };
 
-    recognition.start();
-    recognitionRef.current = recognition;
-    setAppState("listening");
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+      setAppState("listening");
+    } catch (err) {
+      console.error("Failed to start speech recognition:", err);
+      setErrorMsg(
+        "🎤 Could not start voice recognition. Please try the text input instead."
+      );
+      setAppState("error");
+    }
   }, []);
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
+    const rec = recognitionRef.current;
     recognitionRef.current = null;
-    if (transcript.trim()) {
+    rec?.stop();
+    if (transcriptRef.current.trim()) {
       setAppState("ready");
     } else {
       setAppState("idle");
     }
-  }, [transcript]);
+  }, []);
 
   /* ── Generate skybox ──────────────────────────────── */
   const generateSkybox = useCallback(async () => {
@@ -326,6 +355,58 @@ export default function Home() {
     };
   }, [appState, skyboxUrl]);
 
+  /* ── Download GLB ─────────────────────────────────── */
+  const downloadGlb = useCallback(async () => {
+    if (!skyboxUrl || exporting) return;
+    setExporting(true);
+
+    try {
+      const THREE = await import("three");
+      const { GLTFExporter } = await import(
+        "three/examples/jsm/exporters/GLTFExporter.js"
+      );
+
+      const exportScene = new THREE.Scene();
+      const geo = new THREE.SphereGeometry(10, 64, 40);
+      geo.scale(-1, 1, 1);
+
+      const imgRes = await fetch(skyboxUrl);
+      const blob = await imgRes.blob();
+      const bitmap = await createImageBitmap(blob);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.min(bitmap.width, 4096);
+      canvas.height = Math.min(bitmap.height, 2048);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.MeshBasicMaterial({ map: tex });
+      exportScene.add(new THREE.Mesh(geo, mat));
+
+      const exporter = new GLTFExporter();
+      const glb = await exporter.parseAsync(exportScene, { binary: true });
+
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(
+        new Blob([glb as ArrayBuffer], { type: "model/gltf-binary" })
+      );
+      a.download = "voice2world-skybox.glb";
+      a.click();
+      URL.revokeObjectURL(a.href);
+
+      geo.dispose();
+      mat.dispose();
+      tex.dispose();
+    } catch (err) {
+      console.error("GLB export failed:", err);
+      alert("Could not export GLB. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }, [skyboxUrl, exporting]);
+
   /* ── Reset ────────────────────────────────────────── */
   const reset = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -375,6 +456,13 @@ export default function Home() {
           <div className="panorama-overlay">
             <button className="action-btn primary" onClick={reset}>
               ✨ Create Another World
+            </button>
+            <button
+              className="action-btn secondary"
+              onClick={downloadGlb}
+              disabled={exporting}
+            >
+              {exporting ? "⏳ Exporting…" : "📥 Download .glb"}
             </button>
           </div>
         </>
@@ -542,9 +630,14 @@ export default function Home() {
           </div>
 
           {/* Footer */}
-          <p className="mt-8 text-xs" style={{ color: "var(--text-muted)" }}>
-            Powered by LTTC &middot; Built with Next.js
-          </p>
+          <div className="mt-8 flex flex-col items-center gap-1">
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Powered by LTTC
+            </p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              AI may generate inaccurate content.
+            </p>
+          </div>
         </main>
       )}
     </>
