@@ -86,11 +86,44 @@ export default function Home() {
   }, []);
 
   /* ── Voice recording ──────────────────────────────── */
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) {
+      setErrorMsg(
+        "🎤 Voice input is not supported in this browser. Please use Chrome, Edge, or Safari."
+      );
+      setAppState("error");
+      return;
+    }
+
+    /* Request mic permission explicitly via getUserMedia.
+       This triggers the native browser permission dialog on both
+       desktop and mobile, ensuring the mic is accessible before
+       SpeechRecognition tries to use it. */
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+    } catch (err: any) {
+      console.error("Microphone permission error:", err);
+      const name = err?.name ?? "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setErrorMsg(
+          "🎤 Microphone permission denied!\n\nPlease tap the lock/info icon in your browser's address bar, allow Microphone access, then reload the page."
+        );
+      } else if (name === "NotFoundError") {
+        setErrorMsg(
+          "🎤 No microphone detected!\n\nPlease connect a microphone or use the ⌨️ Type mode instead."
+        );
+      } else {
+        setErrorMsg(
+          "🎤 Could not access your microphone. Please check your device settings or use ⌨️ Type mode."
+        );
+      }
+      setAppState("error");
+      return;
+    }
 
     const recognition = new SR();
     recognition.continuous = true;
@@ -112,7 +145,7 @@ export default function Home() {
       recognitionRef.current = null;
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         setErrorMsg(
-          "🎤 Microphone access denied! Please allow microphone access in your browser settings and try again."
+          "🎤 Microphone access was blocked. Please allow microphone in your browser settings and reload."
         );
         setAppState("error");
       } else if (event.error === "no-speech") {
@@ -143,7 +176,7 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to start speech recognition:", err);
       setErrorMsg(
-        "🎤 Could not start voice recognition. Please try the text input instead."
+        "🎤 Could not start voice recognition. Please try ⌨️ Type mode instead."
       );
       setAppState("error");
     }
@@ -619,7 +652,7 @@ export default function Home() {
             {appState === "error" && (
               <div className="fade-in flex flex-col items-center gap-4">
                 <div className="text-5xl">😕</div>
-                <p className="text-center font-bold text-red-500">
+                <p className="text-center font-bold text-red-500 whitespace-pre-line">
                   {errorMsg}
                 </p>
                 <button className="action-btn primary" onClick={reset}>
