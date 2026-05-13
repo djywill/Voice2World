@@ -86,41 +86,14 @@ export default function Home() {
   }, []);
 
   /* ── Voice recording ──────────────────────────────── */
-  const startListening = useCallback(async () => {
+  const startListening = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR) {
       setErrorMsg(
-        "🎤 Voice input is not supported in this browser. Please use Chrome, Edge, or Safari."
+        "🎤 Voice input is not supported in this browser.\n\nPlease use Chrome or Edge, or switch to ⌨️ Type mode."
       );
-      setAppState("error");
-      return;
-    }
-
-    /* Request mic permission explicitly via getUserMedia.
-       This triggers the native browser permission dialog on both
-       desktop and mobile, ensuring the mic is accessible before
-       SpeechRecognition tries to use it. */
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop());
-    } catch (err: any) {
-      console.error("Microphone permission error:", err);
-      const name = err?.name ?? "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        setErrorMsg(
-          "🎤 Microphone permission denied!\n\nPlease tap the lock/info icon in your browser's address bar, allow Microphone access, then reload the page."
-        );
-      } else if (name === "NotFoundError") {
-        setErrorMsg(
-          "🎤 No microphone detected!\n\nPlease connect a microphone or use the ⌨️ Type mode instead."
-        );
-      } else {
-        setErrorMsg(
-          "🎤 Could not access your microphone. Please check your device settings or use ⌨️ Type mode."
-        );
-      }
       setAppState("error");
       return;
     }
@@ -128,7 +101,7 @@ export default function Home() {
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = navigator.language || "en-US";
+    recognition.lang = "en-US";
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
@@ -139,21 +112,44 @@ export default function Home() {
       setTranscript(text);
     };
 
+    recognition.onaudiostart = () => {
+      console.log("Microphone is capturing audio");
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
       recognitionRef.current = null;
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        setErrorMsg(
-          "🎤 Microphone access was blocked. Please allow microphone in your browser settings and reload."
-        );
-        setAppState("error");
-      } else if (event.error === "no-speech") {
-        setErrorMsg("🎤 No speech detected — try speaking louder!");
-        setAppState("error");
-      } else if (event.error !== "aborted") {
-        setErrorMsg("🎤 Couldn't hear you — please check your microphone!");
-        setAppState("error");
+
+      switch (event.error) {
+        case "not-allowed":
+        case "service-not-allowed":
+          setErrorMsg(
+            "🎤 Microphone permission denied!\n\nOn phone: Go to browser Settings → Site Settings → Microphone → Allow for this site, then reload.\n\nOn computer: Click the lock icon in the address bar → Allow Microphone."
+          );
+          setAppState("error");
+          break;
+        case "no-speech":
+          setErrorMsg("🎤 No speech detected — try speaking closer to the microphone!");
+          setAppState("error");
+          break;
+        case "audio-capture":
+          setErrorMsg(
+            "🎤 No microphone found!\n\nPlease connect a microphone, or use ⌨️ Type mode."
+          );
+          setAppState("error");
+          break;
+        case "network":
+          setErrorMsg(
+            "🎤 Network error — speech recognition needs an internet connection. Please check your connection and try again."
+          );
+          setAppState("error");
+          break;
+        case "aborted":
+          break;
+        default:
+          setErrorMsg("🎤 Something went wrong with the microphone. Please try again or use ⌨️ Type mode.");
+          setAppState("error");
       }
     };
 
@@ -169,6 +165,10 @@ export default function Home() {
       }
     };
 
+    /* IMPORTANT: recognition.start() MUST be called synchronously
+       in the click handler's call stack. Using async/await before
+       this call breaks the "user gesture" chain on mobile browsers,
+       causing automatic permission denial. */
     try {
       recognition.start();
       recognitionRef.current = recognition;
@@ -176,7 +176,7 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to start speech recognition:", err);
       setErrorMsg(
-        "🎤 Could not start voice recognition. Please try ⌨️ Type mode instead."
+        "🎤 Could not start voice recognition.\n\nPlease try ⌨️ Type mode instead."
       );
       setAppState("error");
     }
