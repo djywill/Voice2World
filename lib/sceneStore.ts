@@ -7,7 +7,7 @@ interface SceneState {
   selectedId: string | null;
   activeHotspot: string | null;
 
-  setScene: (scene: SceneData) => void;
+  setScene: (scene: SceneData | null) => void;
   updateSkybox: (url: string) => void;
   setMode: (mode: "view" | "edit") => void;
   setSelected: (id: string | null) => void;

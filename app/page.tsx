@@ -114,7 +114,7 @@ export default function Home() {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error);
+      console.warn("Speech recognition error:", event.error);
       recognitionRef.current = null;
       switch (event.error) {
         case "not-allowed":
@@ -131,13 +131,17 @@ export default function Home() {
           setAppState("error");
           break;
         case "network":
-          setErrorMsg("🎤 Network error — check your connection.");
+          setUseTextMode(true);
+          setErrorMsg(
+            "🎤 Voice service unavailable — switched to ⌨️ Type mode.\n\nVoice requires Chrome/Edge with a stable internet connection."
+          );
           setAppState("error");
           break;
         case "aborted":
           break;
         default:
-          setErrorMsg("🎤 Something went wrong. Try ⌨️ Type mode.");
+          setUseTextMode(true);
+          setErrorMsg("🎤 Something went wrong — switched to ⌨️ Type mode.");
           setAppState("error");
       }
     };
@@ -253,11 +257,12 @@ export default function Home() {
     if (msgRef.current) clearInterval(msgRef.current);
     pollRef.current = null;
     msgRef.current = null;
+    setScene(null);
     setAppState("idle");
     setTranscript("");
     setProgressMsg(FUN_MESSAGES[0]);
     setErrorMsg("");
-  }, []);
+  }, [setScene]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();

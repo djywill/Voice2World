@@ -219,13 +219,13 @@ export function SceneEditor({ onReset }: { onReset: () => void }) {
                   onChange={(e) => setField("title", e.target.value)}
                 />
                 <label>
-                  {dialog === "addImage" ? "Image URL" : "Video URL (.mp4)"}
+                  {dialog === "addImage" ? "Image URL" : "Video URL"}
                 </label>
                 <input
                   placeholder={
                     dialog === "addImage"
                       ? "https://example.com/photo.jpg"
-                      : "https://example.com/video.mp4"
+                      : "YouTube link or .mp4 URL"
                   }
                   value={formData.url || ""}
                   onChange={(e) => setField("url", e.target.value)}
