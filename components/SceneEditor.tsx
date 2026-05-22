@@ -1,11 +1,23 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSceneStore } from "@/lib/sceneStore";
 import { cameraState } from "@/lib/cameraState";
 import type { MediaPanelData, HotspotData } from "@/types/scene";
 
-type Dialog = "addImage" | "addVideo" | "addHotspot" | null;
+type Dialog = "addImage" | "addVideo" | "addHotspot" | "regenerate" | null;
+
+const REGEN_MESSAGES = [
+  "🎨 Painting the new sky…",
+  "🌳 Growing new trees…",
+  "✨ Sprinkling magic dust…",
+  "🏔️ Carving new mountains…",
+  "🌊 Reshaping the oceans…",
+  "☁️ Reshaping the clouds…",
+  "🌈 Mixing new colors…",
+  "⭐ Hanging new stars…",
+];
 
 export function SceneEditor({ onReset }: { onReset: () => void }) {
   const store = useSceneStore();
@@ -13,6 +25,17 @@ export function SceneEditor({ onReset }: { onReset: () => void }) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenMsg, setRegenMsg] = useState(REGEN_MESSAGES[0]);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const msgRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (msgRef.current) clearInterval(msgRef.current);
+    };
+  }, []);
 
   const setField = useCallback(
     (key: string, val: string) => setFormData((f) => ({ ...f, [key]: val })),
@@ -92,6 +115,74 @@ export function SceneEditor({ onReset }: { onReset: () => void }) {
     else if (isHotspot) store.updateHotspot(selectedId, { position: pos });
   };
 
+  const handleRegenerate = async () => {
+    const prompt = formData.regenPrompt?.trim();
+    if (!prompt) return;
+
+    setDialog(null);
+    setRegenerating(true);
+    let idx = 0;
+    setRegenMsg(REGEN_MESSAGES[0]);
+    msgRef.current = setInterval(() => {
+      idx = (idx + 1) % REGEN_MESSAGES.length;
+      setRegenMsg(REGEN_MESSAGES[idx]);
+    }, 3000);
+
+    try {
+      const body: Record<string, unknown> = { prompt };
+      if (scene.skyboxStyleId) body.skybox_style_id = scene.skyboxStyleId;
+
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
+
+      const generationId = data.id;
+      if (!generationId) throw new Error("No generation ID");
+
+      pollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/status/${generationId}`);
+          const statusData = await statusRes.json();
+
+          if (statusData.status === "complete" && statusData.file_url) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            if (msgRef.current) clearInterval(msgRef.current);
+            pollRef.current = null;
+            msgRef.current = null;
+            store.updateSkybox(statusData.file_url, formData.regenPrompt?.trim());
+            setRegenerating(false);
+            setFormData({});
+          } else if (
+            statusData.status === "error" ||
+            statusData.status === "abort"
+          ) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            if (msgRef.current) clearInterval(msgRef.current);
+            pollRef.current = null;
+            msgRef.current = null;
+            setRegenerating(false);
+            alert("Generation failed. Please try again.");
+          }
+        } catch {
+          if (pollRef.current) clearInterval(pollRef.current);
+          if (msgRef.current) clearInterval(msgRef.current);
+          pollRef.current = null;
+          msgRef.current = null;
+          setRegenerating(false);
+        }
+      }, 3000);
+    } catch {
+      if (msgRef.current) clearInterval(msgRef.current);
+      msgRef.current = null;
+      setRegenerating(false);
+      alert("Failed to start generation. Please try again.");
+    }
+  };
+
   return (
     <>
       {/* Controls hint */}
@@ -100,6 +191,16 @@ export function SceneEditor({ onReset }: { onReset: () => void }) {
         <span>⌨️ WASD to walk</span>
         {mode === "edit" && <span>📌 Click objects to select</span>}
       </div>
+
+      {/* Regenerating overlay */}
+      {regenerating && createPortal(
+        <div className="regen-overlay">
+          <div className="regen-spinner" />
+          <p className="regen-msg">{regenMsg}</p>
+          <p className="regen-sub">Regenerating skybox…</p>
+        </div>,
+        document.body
+      )}
 
       {/* Toolbar */}
       <div className="scene-toolbar">
@@ -125,6 +226,15 @@ export function SceneEditor({ onReset }: { onReset: () => void }) {
             </button>
             <button className="toolbar-btn accent" onClick={() => setDialog("addHotspot")}>
               📌 Info Point
+            </button>
+            <button
+              className="toolbar-btn accent"
+              onClick={() => {
+                setFormData({ regenPrompt: scene.prompt });
+                setDialog("regenerate");
+              }}
+            >
+              🔄 Change Sky
             </button>
             <button className="toolbar-btn" onClick={handleSave}>
               {saved ? "✅ Saved!" : "💾 Save"}
@@ -200,8 +310,8 @@ export function SceneEditor({ onReset }: { onReset: () => void }) {
         </div>
       )}
 
-      {/* Add dialogs */}
-      {dialog && (
+      {/* Portaled dialogs — rendered to document.body to escape drei's stacking context */}
+      {dialog && dialog !== "regenerate" && createPortal(
         <div className="dialog-backdrop" onClick={() => { setDialog(null); setFormData({}); }}>
           <div className="dialog" onClick={(e) => e.stopPropagation()}>
             <h3>
@@ -270,7 +380,44 @@ export function SceneEditor({ onReset }: { onReset: () => void }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Regenerate skybox dialog */}
+      {dialog === "regenerate" && createPortal(
+        <div className="dialog-backdrop" onClick={() => { setDialog(null); setFormData({}); }}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()}>
+            <h3>🔄 Change Sky / Scene</h3>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 12px" }}>
+              Enter a new description to regenerate the 360° background. Your media panels and info points will be preserved.
+            </p>
+            <label>Scene Description</label>
+            <textarea
+              placeholder="Describe the scene you want…"
+              value={formData.regenPrompt || ""}
+              onChange={(e) => setField("regenPrompt", e.target.value)}
+              rows={3}
+              style={{ resize: "vertical" }}
+            />
+            <div className="dialog-actions">
+              <button
+                className="action-btn secondary"
+                onClick={() => { setDialog(null); setFormData({}); }}
+              >
+                Cancel
+              </button>
+              <button
+                className="action-btn primary"
+                onClick={handleRegenerate}
+                disabled={!formData.regenPrompt?.trim()}
+              >
+                🔄 Regenerate Sky
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </>
   );

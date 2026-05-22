@@ -92,25 +92,55 @@ function VideoPanel({
         style={{
           width: `${pxW}px`,
           height: `${pxH}px`,
-          pointerEvents: isEditMode ? "none" : "auto",
         }}
       >
         <div
           style={{
             width: "100%",
             height: "100%",
+            position: "relative",
             borderRadius: "8px",
             overflow: "hidden",
             background: "#000",
             boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
           }}
-          onClick={(e) => {
-            if (isEditMode) {
-              e.stopPropagation();
-              setSelected(data.id);
-            }
-          }}
         >
+          {/* Edit mode: transparent overlay captures clicks for selection */}
+          {isEditMode && (
+            <div
+              className="video-edit-overlay"
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 10,
+                cursor: "pointer",
+                background: isSelected
+                  ? "rgba(124,92,191,0.25)"
+                  : "rgba(0,0,0,0.05)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelected(data.id);
+              }}
+            >
+              <span
+                style={{
+                  background: "rgba(0,0,0,0.7)",
+                  color: "#fff",
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                }}
+              >
+                {isSelected ? "✅ Selected" : "👆 Click to select"}
+              </span>
+            </div>
+          )}
+
           {isYT ? (
             <iframe
               src={getYouTubeEmbedUrl(data.url)}
@@ -132,10 +162,7 @@ function VideoPanel({
         </div>
       </Html>
       {data.title && (
-        <Html
-          position={[0, -data.scale[1] / 2 - 0.4, 0]}
-          center
-        >
+        <Html position={[0, -data.scale[1] / 2 - 0.4, 0]} center>
           <div className="panel-label">{data.title}</div>
         </Html>
       )}

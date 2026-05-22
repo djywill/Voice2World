@@ -8,7 +8,7 @@ interface SceneState {
   activeHotspot: string | null;
 
   setScene: (scene: SceneData | null) => void;
-  updateSkybox: (url: string) => void;
+  updateSkybox: (url: string, prompt?: string) => void;
   setMode: (mode: "view" | "edit") => void;
   setSelected: (id: string | null) => void;
   setActiveHotspot: (id: string | null) => void;
@@ -51,10 +51,17 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setScene: (scene) =>
     set({ scene, mode: "view", selectedId: null, activeHotspot: null }),
 
-  updateSkybox: (url) =>
+  updateSkybox: (url, prompt) =>
     set((s) =>
       s.scene
-        ? { scene: { ...s.scene, skyboxUrl: url, updatedAt: Date.now() } }
+        ? {
+            scene: {
+              ...s.scene,
+              skyboxUrl: url,
+              ...(prompt ? { prompt } : {}),
+              updatedAt: Date.now(),
+            },
+          }
         : {}
     ),
 
