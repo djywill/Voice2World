@@ -7,6 +7,13 @@ import {
   useCallback,
   type FormEvent,
 } from "react";
+import dynamic from "next/dynamic";
+import { useSceneStore } from "@/lib/sceneStore";
+import { StyleSelector } from "@/components/StyleSelector";
+
+const SceneViewer = dynamic(() => import("@/components/SceneViewer"), {
+  ssr: false,
+});
 
 type AppState =
   | "idle"
@@ -42,29 +49,25 @@ export default function Home() {
   const [appState, setAppState] = useState<AppState>("idle");
   const [transcript, setTranscript] = useState("");
   const [progressMsg, setProgressMsg] = useState(FUN_MESSAGES[0]);
-  const [skyboxUrl, setSkyboxUrl] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [useTextMode, setUseTextMode] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
-  const [exporting, setExporting] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<number | null>(null);
+  const [showSaved, setShowSaved] = useState(false);
 
-  const viewerRef = useRef<HTMLDivElement>(null);
+  const { setScene, getSavedScenes, loadFromLocal, deleteFromLocal } =
+    useSceneStore();
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
-  const rendererRef = useRef<{
-    dispose: () => void;
-  } | null>(null);
-  const animFrameRef = useRef<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const msgRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptRef = useRef("");
 
-  /* keep ref in sync so onend can read latest transcript */
   useEffect(() => {
     transcriptRef.current = transcript;
   }, [transcript]);
 
-  /* ── Browser support check ────────────────────────── */
   useEffect(() => {
     if (typeof window === "undefined") return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,13 +78,10 @@ export default function Home() {
     }
   }, []);
 
-  /* ── Cleanup on unmount ───────────────────────────── */
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (msgRef.current) clearInterval(msgRef.current);
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      rendererRef.current?.dispose();
     };
   }, []);
 
@@ -112,43 +112,32 @@ export default function Home() {
       setTranscript(text);
     };
 
-    recognition.onaudiostart = () => {
-      console.log("Microphone is capturing audio");
-    };
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
       recognitionRef.current = null;
-
       switch (event.error) {
         case "not-allowed":
         case "service-not-allowed":
-          setErrorMsg(
-            "🎤 Microphone permission denied!\n\nOn phone: Go to browser Settings → Site Settings → Microphone → Allow for this site, then reload.\n\nOn computer: Click the lock icon in the address bar → Allow Microphone."
-          );
+          setErrorMsg("🎤 Microphone permission denied!");
           setAppState("error");
           break;
         case "no-speech":
-          setErrorMsg("🎤 No speech detected — try speaking closer to the microphone!");
+          setErrorMsg("🎤 No speech detected — try speaking closer!");
           setAppState("error");
           break;
         case "audio-capture":
-          setErrorMsg(
-            "🎤 No microphone found!\n\nPlease connect a microphone, or use ⌨️ Type mode."
-          );
+          setErrorMsg("🎤 No microphone found!");
           setAppState("error");
           break;
         case "network":
-          setErrorMsg(
-            "🎤 Network error — speech recognition needs an internet connection. Please check your connection and try again."
-          );
+          setErrorMsg("🎤 Network error — check your connection.");
           setAppState("error");
           break;
         case "aborted":
           break;
         default:
-          setErrorMsg("🎤 Something went wrong with the microphone. Please try again or use ⌨️ Type mode.");
+          setErrorMsg("🎤 Something went wrong. Try ⌨️ Type mode.");
           setAppState("error");
       }
     };
@@ -157,27 +146,16 @@ export default function Home() {
       const wasActive = recognitionRef.current !== null;
       recognitionRef.current = null;
       if (wasActive) {
-        if (transcriptRef.current.trim()) {
-          setAppState("ready");
-        } else {
-          setAppState("idle");
-        }
+        setAppState(transcriptRef.current.trim() ? "ready" : "idle");
       }
     };
 
-    /* IMPORTANT: recognition.start() MUST be called synchronously
-       in the click handler's call stack. Using async/await before
-       this call breaks the "user gesture" chain on mobile browsers,
-       causing automatic permission denial. */
     try {
       recognition.start();
       recognitionRef.current = recognition;
       setAppState("listening");
-    } catch (err) {
-      console.error("Failed to start speech recognition:", err);
-      setErrorMsg(
-        "🎤 Could not start voice recognition.\n\nPlease try ⌨️ Type mode instead."
-      );
+    } catch {
+      setErrorMsg("🎤 Could not start voice recognition.");
       setAppState("error");
     }
   }, []);
@@ -186,11 +164,7 @@ export default function Home() {
     const rec = recognitionRef.current;
     recognitionRef.current = null;
     rec?.stop();
-    if (transcriptRef.current.trim()) {
-      setAppState("ready");
-    } else {
-      setAppState("idle");
-    }
+    setAppState(transcriptRef.current.trim() ? "ready" : "idle");
   }, []);
 
   /* ── Generate skybox ──────────────────────────────── */
@@ -208,16 +182,17 @@ export default function Home() {
     }, 3000);
 
     try {
+      const body: Record<string, unknown> = { prompt };
+      if (selectedStyle) body.skybox_style_id = selectedStyle;
+
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
 
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Generation failed");
-      }
+      if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
 
       const generationId = data.id;
       if (!generationId) throw new Error("No generation ID returned");
@@ -232,7 +207,18 @@ export default function Home() {
             if (msgRef.current) clearInterval(msgRef.current);
             pollRef.current = null;
             msgRef.current = null;
-            setSkyboxUrl(statusData.file_url);
+
+            setScene({
+              id: String(generationId),
+              name: prompt.slice(0, 50),
+              prompt,
+              skyboxUrl: statusData.file_url,
+              skyboxStyleId: selectedStyle,
+              mediaPanels: [],
+              hotspots: [],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
             setAppState("viewing");
           } else if (
             statusData.status === "error" ||
@@ -243,8 +229,7 @@ export default function Home() {
             pollRef.current = null;
             msgRef.current = null;
             setErrorMsg(
-              statusData.error_message ||
-                "The magic fizzled out! Let's try again."
+              statusData.error_message || "The magic fizzled out! Try again."
             );
             setAppState("error");
           }
@@ -256,189 +241,11 @@ export default function Home() {
       if (msgRef.current) clearInterval(msgRef.current);
       msgRef.current = null;
       setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : "Oops! Something went wrong. Let's try again!"
+        err instanceof Error ? err.message : "Something went wrong!"
       );
       setAppState("error");
     }
-  }, [transcript]);
-
-  /* ── Three.js panorama ────────────────────────────── */
-  useEffect(() => {
-    if (appState !== "viewing" || !skyboxUrl || !viewerRef.current) return;
-    const container = viewerRef.current;
-
-    let disposed = false;
-
-    import("three").then((THREE) => {
-      if (disposed) return;
-
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1100);
-      camera.position.set(0, 0, 0.1);
-
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(w, h);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      container.appendChild(renderer.domElement);
-
-      const geo = new THREE.SphereGeometry(500, 64, 40);
-      geo.scale(-1, 1, 1);
-
-      const loader = new THREE.TextureLoader();
-      loader.crossOrigin = "anonymous";
-      const tex = loader.load(skyboxUrl, (t) => {
-        t.colorSpace = THREE.SRGBColorSpace;
-      });
-      const mat = new THREE.MeshBasicMaterial({ map: tex });
-      scene.add(new THREE.Mesh(geo, mat));
-
-      let lon = 0;
-      let lat = 0;
-      let downX = 0;
-      let downY = 0;
-      let downLon = 0;
-      let downLat = 0;
-      let dragging = false;
-
-      const onDown = (e: PointerEvent) => {
-        dragging = true;
-        downX = e.clientX;
-        downY = e.clientY;
-        downLon = lon;
-        downLat = lat;
-      };
-      const onMove = (e: PointerEvent) => {
-        if (!dragging) return;
-        lon = (downX - e.clientX) * 0.15 + downLon;
-        lat = (e.clientY - downY) * 0.15 + downLat;
-      };
-      const onUp = () => {
-        dragging = false;
-      };
-
-      container.addEventListener("pointerdown", onDown);
-      container.addEventListener("pointermove", onMove);
-      container.addEventListener("pointerup", onUp);
-
-      const onResize = () => {
-        const cw = container.clientWidth;
-        const ch = container.clientHeight;
-        camera.aspect = cw / ch;
-        camera.updateProjectionMatrix();
-        renderer.setSize(cw, ch);
-      };
-      window.addEventListener("resize", onResize);
-
-      const animate = () => {
-        if (disposed) return;
-        animFrameRef.current = requestAnimationFrame(animate);
-        lat = Math.max(-85, Math.min(85, lat));
-        const phi = THREE.MathUtils.degToRad(90 - lat);
-        const theta = THREE.MathUtils.degToRad(lon);
-        camera.lookAt(
-          500 * Math.sin(phi) * Math.cos(theta),
-          500 * Math.cos(phi),
-          500 * Math.sin(phi) * Math.sin(theta)
-        );
-        renderer.render(scene, camera);
-      };
-
-      if (!dragging) {
-        const autoRotate = () => {
-          if (dragging || disposed) return;
-          lon += 0.05;
-        };
-        const autoId = setInterval(autoRotate, 16);
-        container.addEventListener(
-          "pointerdown",
-          () => clearInterval(autoId),
-          { once: true }
-        );
-      }
-
-      animate();
-
-      rendererRef.current = {
-        dispose: () => {
-          disposed = true;
-          cancelAnimationFrame(animFrameRef.current);
-          renderer.dispose();
-          geo.dispose();
-          mat.dispose();
-          tex.dispose();
-          container.removeEventListener("pointerdown", onDown);
-          container.removeEventListener("pointermove", onMove);
-          container.removeEventListener("pointerup", onUp);
-          window.removeEventListener("resize", onResize);
-          const canvas = container.querySelector("canvas");
-          if (canvas) canvas.remove();
-        },
-      };
-    });
-
-    return () => {
-      disposed = true;
-      rendererRef.current?.dispose();
-      rendererRef.current = null;
-    };
-  }, [appState, skyboxUrl]);
-
-  /* ── Download GLB ─────────────────────────────────── */
-  const downloadGlb = useCallback(async () => {
-    if (!skyboxUrl || exporting) return;
-    setExporting(true);
-
-    try {
-      const THREE = await import("three");
-      const { GLTFExporter } = await import(
-        "three/examples/jsm/exporters/GLTFExporter.js"
-      );
-
-      const exportScene = new THREE.Scene();
-      const geo = new THREE.SphereGeometry(10, 64, 40);
-      geo.scale(-1, 1, 1);
-
-      const imgRes = await fetch(skyboxUrl);
-      const blob = await imgRes.blob();
-      const bitmap = await createImageBitmap(blob);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.min(bitmap.width, 4096);
-      canvas.height = Math.min(bitmap.height, 2048);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      const mat = new THREE.MeshBasicMaterial({ map: tex });
-      exportScene.add(new THREE.Mesh(geo, mat));
-
-      const exporter = new GLTFExporter();
-      const glb = await exporter.parseAsync(exportScene, { binary: true });
-
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(
-        new Blob([glb as ArrayBuffer], { type: "model/gltf-binary" })
-      );
-      a.download = "voice2world-skybox.glb";
-      a.click();
-      URL.revokeObjectURL(a.href);
-
-      geo.dispose();
-      mat.dispose();
-      tex.dispose();
-    } catch (err) {
-      console.error("GLB export failed:", err);
-      alert("Could not export GLB. Please try again.");
-    } finally {
-      setExporting(false);
-    }
-  }, [skyboxUrl, exporting]);
+  }, [transcript, selectedStyle, setScene]);
 
   /* ── Reset ────────────────────────────────────────── */
   const reset = useCallback(() => {
@@ -446,62 +253,38 @@ export default function Home() {
     if (msgRef.current) clearInterval(msgRef.current);
     pollRef.current = null;
     msgRef.current = null;
-    rendererRef.current?.dispose();
-    rendererRef.current = null;
-
     setAppState("idle");
     setTranscript("");
     setProgressMsg(FUN_MESSAGES[0]);
-    setSkyboxUrl("");
     setErrorMsg("");
   }, []);
 
-  /* ── Handle text submit ───────────────────────────── */
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (transcript.trim()) {
-      generateSkybox();
-    }
+    if (transcript.trim()) generateSkybox();
   };
 
-  /* ── Pick example ─────────────────────────────────── */
   const pickExample = (text: string) => {
-    const clean = text.replace(/^.\s/, "");
-    setTranscript(clean);
+    setTranscript(text.replace(/^.\s/, ""));
     setAppState("ready");
   };
+
+  const savedScenes = showSaved ? getSavedScenes() : [];
 
   /* ═══════════════════════════════════════════════════ */
   /*  R E N D E R                                       */
   /* ═══════════════════════════════════════════════════ */
   return (
     <>
-      {/* ── Background blobs ─────────────────────── */}
+      {/* Background blobs */}
       <div className="orb orb-1" aria-hidden="true" />
       <div className="orb orb-2" aria-hidden="true" />
       <div className="orb orb-3" aria-hidden="true" />
 
-      {/* ── 3-D Panorama (full-screen overlay) ────── */}
-      {appState === "viewing" && (
-        <>
-          <div ref={viewerRef} className="panorama-container" />
-          <div className="panorama-hint">👆 Drag to explore your world!</div>
-          <div className="panorama-overlay">
-            <button className="action-btn primary" onClick={reset}>
-              ✨ Create Another World
-            </button>
-            <button
-              className="action-btn secondary"
-              onClick={downloadGlb}
-              disabled={exporting}
-            >
-              {exporting ? "⏳ Exporting…" : "📥 Download .glb"}
-            </button>
-          </div>
-        </>
-      )}
+      {/* 3D Scene (full-screen) */}
+      {appState === "viewing" && <SceneViewer onReset={reset} />}
 
-      {/* ── Main UI ───────────────────────────────── */}
+      {/* Main UI */}
       {appState !== "viewing" && (
         <main className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 py-12">
           <div className="glass-card fade-in flex w-full max-w-lg flex-col items-center gap-6 text-center">
@@ -526,7 +309,10 @@ export default function Home() {
                   Voice2World
                 </span>
               </h1>
-              <p className="mt-2 text-base font-semibold sm:text-lg" style={{ color: "var(--text-secondary)" }}>
+              <p
+                className="mt-2 text-base font-semibold sm:text-lg"
+                style={{ color: "var(--text-secondary)" }}
+              >
                 Speak your imagination into a 3D world!
               </p>
             </div>
@@ -542,9 +328,7 @@ export default function Home() {
                     <button
                       className={`mic-btn ${appState === "listening" ? "recording" : ""}`}
                       onClick={
-                        appState === "listening"
-                          ? stopListening
-                          : startListening
+                        appState === "listening" ? stopListening : startListening
                       }
                       aria-label={
                         appState === "listening"
@@ -567,7 +351,10 @@ export default function Home() {
                       </div>
                     )}
 
-                    <p className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>
+                    <p
+                      className="text-sm font-semibold"
+                      style={{ color: "var(--text-muted)" }}
+                    >
                       {appState === "listening"
                         ? "Listening… tap ⏹️ when done"
                         : "Tap the mic and describe your world"}
@@ -575,9 +362,12 @@ export default function Home() {
                   </>
                 )}
 
-                {/* Text input (text mode OR after recording) */}
+                {/* Text input */}
                 {(useTextMode || appState === "ready") && (
-                  <form onSubmit={handleSubmit} className="w-full flex flex-col items-center gap-4">
+                  <form
+                    onSubmit={handleSubmit}
+                    className="w-full flex flex-col items-center gap-4"
+                  >
                     <textarea
                       className="prompt-area"
                       value={transcript}
@@ -588,6 +378,13 @@ export default function Home() {
                       placeholder="Describe the world you want to create…"
                       rows={3}
                     />
+
+                    {/* Style Selector */}
+                    <StyleSelector
+                      value={selectedStyle}
+                      onChange={setSelectedStyle}
+                    />
+
                     {transcript.trim() && (
                       <button type="submit" className="action-btn primary">
                         ✨ Create My World!
@@ -610,7 +407,10 @@ export default function Home() {
                 {appState === "idle" && (
                   <div className="flex w-full items-center gap-3">
                     <div className="h-px flex-1 bg-black/8" />
-                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+                    <span
+                      className="text-xs font-bold uppercase tracking-widest"
+                      style={{ color: "var(--text-muted)" }}
+                    >
                       or try an idea
                     </span>
                     <div className="h-px flex-1 bg-black/8" />
@@ -631,6 +431,53 @@ export default function Home() {
                     ))}
                   </div>
                 )}
+
+                {/* Saved scenes */}
+                {appState === "idle" && (
+                  <div className="w-full">
+                    <button
+                      className="mode-toggle"
+                      onClick={() => setShowSaved((v) => !v)}
+                    >
+                      📂 {showSaved ? "Hide" : "Load"} Saved Scenes
+                    </button>
+                    {showSaved && savedScenes.length > 0 && (
+                      <div className="saved-list">
+                        {savedScenes.map((s) => (
+                          <div key={s.id} className="saved-item">
+                            <button
+                              className="saved-name"
+                              onClick={() => {
+                                loadFromLocal(s.id);
+                                setAppState("viewing");
+                              }}
+                            >
+                              {s.name}
+                            </button>
+                            <button
+                              className="saved-delete"
+                              onClick={() => {
+                                deleteFromLocal(s.id);
+                                setShowSaved(false);
+                                setTimeout(() => setShowSaved(true), 0);
+                              }}
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {showSaved && savedScenes.length === 0 && (
+                      <p
+                        className="text-sm mt-2"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        No saved scenes yet.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -639,7 +486,10 @@ export default function Home() {
               <div className="fade-in flex flex-col items-center gap-5">
                 <div className="globe-spinner" />
                 <p className="progress-msg text-center">{progressMsg}</p>
-                <p className="max-w-xs text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+                <p
+                  className="max-w-xs text-center text-sm"
+                  style={{ color: "var(--text-secondary)" }}
+                >
                   &ldquo;{transcript}&rdquo;
                 </p>
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>
